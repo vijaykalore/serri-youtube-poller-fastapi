@@ -14,7 +14,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Add your model's MetaData object here for 'autogenerate' support
-from app.models import Base  # type: ignore
+from app.db import Base  # type: ignore
+import app.models  # noqa: F401  # ensure models are imported for metadata
 
 target_metadata = Base.metadata
 
@@ -23,6 +24,9 @@ def get_url() -> str:
     url = os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL is not set")
+    # Alembic runs with sync engine; translate asyncpg URL to psycopg2
+    if "+asyncpg" in url:
+        url = url.replace("+asyncpg", "+psycopg2")
     return url
 
 

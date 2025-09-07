@@ -82,17 +82,19 @@ async def search_videos(
             )
         ).scalars().all()
     else:
-        # Fallback to ILIKE contains search
-        like = f"%{query}%"
-        total = await session.scalar(
-            select(func.count()).select_from(Video).where(
-                or_(Video.title.ilike(like), Video.description.ilike(like))
-            )
-        )
+        # Fallback to ILIKE contains search with token reordering: all terms must match somewhere
+        terms = [t for t in query.split() if t]
+        cond = None
+        for t in terms:
+            like = f"%{t}%"
+            term_cond = or_(Video.title.ilike(like), Video.description.ilike(like))
+            cond = term_cond if cond is None else (cond & term_cond)
+        cond = cond if cond is not None else text("1=1")
+        total = await session.scalar(select(func.count()).select_from(Video).where(cond))
         items = (
             await session.execute(
                 select(Video)
-                .where(or_(Video.title.ilike(like), Video.description.ilike(like)))
+                .where(cond)
                 .order_by(Video.published_at.desc())
                 .offset((page - 1) * per_page)
                 .limit(per_page)

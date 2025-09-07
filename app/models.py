@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, JSON, Text, func
+from sqlalchemy import BigInteger, Index, JSON, Text, func, TIMESTAMP
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,7 +17,7 @@ class Video(Base):
     video_id: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
     title: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
-    published_at: Mapped[datetime | None]
+    published_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), index=True)
     thumbnails: Mapped[dict[str, Any] | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     channel_id: Mapped[str | None] = mapped_column(Text)
     channel_title: Mapped[str | None] = mapped_column(Text)
