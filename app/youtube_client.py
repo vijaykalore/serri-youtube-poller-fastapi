@@ -68,6 +68,9 @@ class YouTubeClient:
         """Fetch latest videos since published_after using key rotation and backoff.
         Returns raw items list from YouTube API.
         """
+        # If no keys configured, skip external call gracefully
+        if not self.key_rotator._queue:
+            return []
         params = {
             "part": "snippet",
             "type": "video",
