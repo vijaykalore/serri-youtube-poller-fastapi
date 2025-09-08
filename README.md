@@ -1,5 +1,6 @@
 # Serri — YouTube poller backend (FastAPI)
-See Execution_proof folder which contains the sanpshots of the project
+See Execution_proof folder which contains the sanpshots of the project.
+
 I built a small service that keeps pulling the latest YouTube videos for a query (e.g. "cricket"), stores them, and lets you list and search them. It runs in Docker, has a background poller, a couple of APIs, and a simple dashboard.
 
 Reviewer note: if you just want to try it quickly, copy `.env.example` to `.env`, then run `docker compose up -d --build` and open http://localhost:8000. Full details below.
