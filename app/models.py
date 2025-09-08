@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, Index, JSON, Text, func, TIMESTAMP
+from sqlalchemy import Integer, Index, JSON, Text, func, TIMESTAMP
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,7 +13,8 @@ from .db import Base
 class Video(Base):
     __tablename__ = "videos"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # Use Integer PK to support SQLite AUTOINCREMENT semantics
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     video_id: Mapped[str] = mapped_column(Text, unique=True, index=True, nullable=False)
     title: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
@@ -27,4 +28,5 @@ class Video(Base):
 
     __table_args__ = (
         Index("idx_videos_published_at_desc", "published_at", postgresql_using="btree"),
+        {"sqlite_autoincrement": True},
     )

@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        PYTHON_IMAGE: mcr.microsoft.com/devcontainers/python:3.11
+    env_file:
+      - .env
+    environment:
+      # Override DB to SQLite to avoid needing a Postgres container
+      DATABASE_URL: sqlite+aiosqlite:///./dev.db
+    ports:
+      - "8000:8000"
+    command: ["sh", "-c", "uvicorn app.main:app --host ${APP_HOST:-0.0.0.0} --port ${APP_PORT:-8000}"]
+    restart: unless-stopped
+
+volumes: {}

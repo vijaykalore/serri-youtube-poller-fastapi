@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy import text
 from sqlalchemy.orm import DeclarativeBase
 
 from .config import get_settings
@@ -61,3 +62,16 @@ async def drop_all_for_testing(metadata) -> None:
     engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(metadata.drop_all)
+
+
+async def ensure_pg_extensions() -> None:
+    """Ensure required PostgreSQL extensions exist (e.g., pg_trgm for similarity()).
+
+    Safe to call on any backend; it no-ops for non-Postgres engines.
+    """
+    engine = _get_engine()
+    # AsyncEngine exposes dialect name via .dialect.name
+    if getattr(engine, "dialect", None) and engine.dialect.name == "postgresql":
+        async with engine.begin() as conn:
+            # pg_trgm provides similarity() used in ranking for search
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))

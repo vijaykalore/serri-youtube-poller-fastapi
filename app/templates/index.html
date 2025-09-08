@@ -1,1 +1,223 @@
-<!-- Placeholder kept; main index served inline from FastAPI for simplicity -->
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<title>Serri — Videos</title>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+		<style>
+			body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+		</style>
+	</head>
+	<body class="min-h-screen bg-slate-50 relative overflow-x-hidden">
+		<!-- Decorative gradient background -->
+		<div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10">
+			<div class="absolute -top-24 -left-24 w-[40rem] h-[40rem] rounded-full blur-3xl opacity-30" style="background: radial-gradient(circle at 30% 30%, #6366f1, transparent 60%);"></div>
+			<div class="absolute -bottom-32 -right-24 w-[42rem] h-[42rem] rounded-full blur-3xl opacity-30" style="background: radial-gradient(circle at 70% 70%, #10b981, transparent 60%);"></div>
+			<div class="absolute top-1/3 left-1/2 -translate-x-1/2 w-[50rem] h-[50rem] rounded-full blur-3xl opacity-20" style="background: radial-gradient(circle, #f97316, transparent 60%);"></div>
+		</div>
+		<div class="max-w-6xl mx-auto p-6">
+			<header class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+				<div>
+					<h1 class="text-2xl sm:text-3xl font-semibold text-slate-800">Serri — Videos</h1>
+					<p class="text-slate-600">Search and browse latest YouTube results.</p>
+				</div>
+				<div class="flex gap-2">
+					<button id="refreshBtn" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">Refresh</button>
+					<button id="fetchBtn" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm">Fetch now</button>
+					<a href="/docs" target="_blank" class="px-4 py-2 rounded-lg bg-white text-slate-700 border hover:bg-slate-100 shadow-sm">API Docs</a>
+				</div>
+			</header>
+
+			<section class="mt-6">
+				<div class="grid grid-cols-1 sm:grid-cols-12 gap-3 sm:items-center">
+					<div class="relative sm:col-span-5">
+						<input id="q" type="text" placeholder="Search title and description..." class="w-full px-4 py-3 pr-12 rounded-xl border border-slate-300 bg-white/90 backdrop-blur shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+						<div class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">⌘K</div>
+					</div>
+					<div class="sm:col-span-3">
+						<input id="channel" type="text" placeholder="Filter by channel" class="w-full px-4 py-3 rounded-xl border border-slate-300 bg-white/90 backdrop-blur shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+					</div>
+					<div class="sm:col-span-2">
+						<select id="sort" class="w-full px-3 py-3 rounded-xl border border-slate-300 bg-white/90 backdrop-blur shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+							<option value="published_desc">Newest first</option>
+							<option value="published_asc">Oldest first</option>
+						</select>
+					</div>
+					<div class="sm:col-span-2 flex gap-2">
+						<button id="searchBtn" class="flex-1 px-5 py-3 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow">Search</button>
+						<button id="clearBtn" class="flex-1 px-5 py-3 rounded-xl bg-white text-slate-700 border hover:bg-slate-100 shadow">Clear</button>
+					</div>
+				</div>
+			</section>
+
+			<section id="status" class="mt-4 hidden">
+				<div class="flex items-center gap-2 text-slate-600"><span id="statusText"></span>
+					<svg id="spinner" class="animate-spin h-4 w-4 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+					</svg>
+				</div>
+			</section>
+
+			<section id="grid" class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"></section>
+
+			<nav class="mt-6 flex items-center justify-between">
+				<button id="prevBtn" class="px-4 py-2 rounded-lg bg-white text-slate-700 border hover:bg-slate-100 disabled:opacity-50" disabled>Prev</button>
+				<div id="pageInfo" class="text-slate-600">Page 1</div>
+				<button id="nextBtn" class="px-4 py-2 rounded-lg bg-white text-slate-700 border hover:bg-slate-100 disabled:opacity-50" disabled>Next</button>
+			</nav>
+		</div>
+
+		<template id="cardTplt">
+			<article class="bg-white/95 backdrop-blur rounded-xl border shadow-sm overflow-hidden hover:shadow-md transition">
+				<div class="aspect-video bg-slate-200">
+					<a class="thumbLink" target="_blank">
+						<img class="thumb w-full h-full object-cover" alt="thumbnail" />
+					</a>
+				</div>
+				<div class="p-4">
+					<h3 class="title font-medium text-slate-800 line-clamp-2"></h3>
+					<div class="mt-1 text-xs text-slate-500 meta"></div>
+					<p class="mt-2 text-sm text-slate-600 line-clamp-3 desc"></p>
+					<div class="mt-3 flex gap-2">
+						<a class="ytBtn px-3 py-1.5 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700" target="_blank">Open on YouTube</a>
+						<button class="copyBtn px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-sm hover:bg-slate-200">Copy link</button>
+					</div>
+				</div>
+			</article>
+		</template>
+
+		<script>
+			const grid = document.getElementById('grid');
+			const statusEl = document.getElementById('status');
+			const statusText = document.getElementById('statusText');
+			const spinner = document.getElementById('spinner');
+			const prevBtn = document.getElementById('prevBtn');
+			const nextBtn = document.getElementById('nextBtn');
+			const pageInfo = document.getElementById('pageInfo');
+			const searchBtn = document.getElementById('searchBtn');
+			const clearBtn = document.getElementById('clearBtn');
+			const refreshBtn = document.getElementById('refreshBtn');
+			const qInput = document.getElementById('q');
+			const fetchBtn = document.getElementById('fetchBtn');
+
+			let state = { page: 1, per_page: 9, total: 0, q: '', channel: '', sort: 'published_desc' };
+
+			function setLoading(loading, msg='Loading...'){
+				statusEl.classList.toggle('hidden', !loading);
+				statusText.textContent = msg;
+				spinner.style.display = loading ? 'inline-block' : 'none';
+			}
+
+			function card(item){
+				const t = document.getElementById('cardTplt').content.cloneNode(true);
+				const img = t.querySelector('.thumb');
+				const link = t.querySelector('.thumbLink');
+				const ytBtn = t.querySelector('.ytBtn');
+				const copyBtn = t.querySelector('.copyBtn');
+				const url = `https://www.youtube.com/watch?v=${item.video_id}`;
+				const th = item.thumbnails?.high?.url || item.thumbnails?.default?.url || '';
+				if (th) img.src = th; else img.remove();
+				link.href = url;
+				ytBtn.href = url;
+				t.querySelector('.title').textContent = item.title || '(no title)';
+				t.querySelector('.meta').textContent = new Date(item.published_at).toLocaleString() + (item.channel_title ? ` — ${item.channel_title}` : '');
+				t.querySelector('.desc').textContent = (item.description || '').slice(0, 240);
+				copyBtn.addEventListener('click', async () => {
+					await navigator.clipboard.writeText(url);
+					copyBtn.textContent = 'Copied!';
+					setTimeout(() => copyBtn.textContent = 'Copy link', 1200);
+				});
+				return t;
+			}
+
+			async function fetchJSON(url){
+				const r = await fetch(url);
+				if(!r.ok) throw new Error(`HTTP ${r.status}`);
+				return await r.json();
+			}
+
+					async function load(page){
+						state.page = page;
+						setLoading(true, state.q ? 'Searching…' : 'Loading…');
+						try{
+							const params = new URLSearchParams({ page: String(state.page), per_page: String(state.per_page) });
+							let endpoint = '/api/videos';
+							if (state.q) { endpoint = '/api/videos/search'; params.set('q', state.q); }
+							if (state.channel) { params.set('channel', state.channel); }
+							if (state.sort) { params.set('sort', state.sort); }
+							const data = await fetchJSON(`${endpoint}?${params.toString()}`);
+							state.total = data.total;
+							grid.innerHTML = '';
+										if (data.items.length === 0) {
+											const msg = state.q
+												? `No results for “${state.q}”. Try Clear or Seed demo.`
+												: `No videos yet. Use <span class='font-medium'>Seed demo</span> to add sample items, or enable the poller with API keys.`;
+											grid.innerHTML = `<div class=\"text-slate-600\">${msg}</div>`;
+										} else {
+								data.items.forEach(it => grid.appendChild(card(it)));
+							}
+							prevBtn.disabled = !data.prev_page;
+							nextBtn.disabled = !data.next_page;
+							pageInfo.textContent = `Page ${data.page}`;
+						}catch(err){
+							grid.innerHTML = `<div class=\"text-red-600\">Failed to load: ${err.message}</div>`;
+						}finally{
+							setLoading(false);
+						}
+					}
+
+			prevBtn.addEventListener('click', () => load(Math.max(1, state.page - 1)));
+			nextBtn.addEventListener('click', () => load(state.page + 1));
+			const channelInput = document.getElementById('channel');
+			const sortSelect = document.getElementById('sort');
+			searchBtn.addEventListener('click', () => { state.q = qInput.value.trim(); state.channel = channelInput.value.trim(); state.sort = sortSelect.value; load(1); });
+			clearBtn.addEventListener('click', () => { qInput.value = ''; channelInput.value=''; sortSelect.value='published_desc'; state.q = ''; state.channel = ''; state.sort = 'published_desc'; load(1); });
+					refreshBtn.addEventListener('click', () => load(state.page));
+							fetchBtn.addEventListener('click', async () => {
+								setLoading(true, 'Fetching from YouTube…');
+								try {
+									const params = new URLSearchParams();
+									if (state.q) params.set('q', state.q);
+									const r = await fetch(`/api/videos/_fetch_now?${params.toString()}`, { method: 'POST' });
+									if (!r.ok) throw new Error(`HTTP ${r.status}`);
+									await r.json();
+									await load(1);
+								} catch (e) {
+									alert('Fetch failed: ' + e.message);
+								} finally {
+									setLoading(false);
+								}
+							});
+					// Optional: demo seed (only works if backend allows it on SQLite)
+					const demoBtn = document.createElement('button');
+					demoBtn.textContent = 'Seed demo';
+					demoBtn.className = 'px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700';
+					refreshBtn.parentElement.insertBefore(demoBtn, refreshBtn);
+					  demoBtn.addEventListener('click', async () => {
+						setLoading(true, 'Seeding…');
+						try {
+							const r = await fetch('/api/videos/_seed', { method: 'POST' });
+							if (!r.ok) throw new Error(`HTTP ${r.status}`);
+							await r.json();
+						  // Clear search so the new items are visible immediately
+						  qInput.value = '';
+						  state.q = '';
+						  await load(1);
+						} catch (e) {
+							alert('Seeding failed: ' + e.message);
+						} finally {
+							setLoading(false);
+						}
+					});
+			qInput.addEventListener('keydown', (e) => { if(e.key === 'Enter'){ state.q = qInput.value.trim(); load(1); } });
+			window.addEventListener('keydown', (e) => { if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); qInput.focus(); }});
+
+			load(1);
+		</script>
+	</body>
+	</html>

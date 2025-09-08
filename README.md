@@ -1,10 +1,15 @@
-# Serri — Backend Assignment
+# Serri — YouTube Poller Backend
 
-> Author: Vijay Kalore · Role: Candidate — Backend Engineer · Company: Serri
+Reviewer quick note: For fastest review, see SUBMISSION.md for a condensed run/validate guide. TL;DR — copy .env.example to .env, then `docker compose up -d --build`, open http://localhost:8000.
 
-This repository contains a Dockerized FastAPI backend that continuously polls the YouTube Data v3 Search API for the latest videos for a configurable search query and stores them in a PostgreSQL database. It exposes endpoints to list and search videos with pagination and a minimal dashboard.
+Author: Vijay kalore · Email: vijaykalore.ds2gmail.com · Role: Candidate — Backend Engineer · Company: Serri
 
-Submission prepared by Vijay Kalore for Serri hiring assignment (September 7, 2025).
+A Dockerized FastAPI service that continuously polls the YouTube Data v3 Search API for the latest videos for a predefined query, stores them with indexes, and exposes:
+- A paginated list API sorted by published datetime (desc)
+- A search API on title + description with partial/reordered match support
+- An optional dashboard to browse/search videos
+
+Submission date: September 8, 2025
 
 ## Quick start (Docker Compose)
 
@@ -20,34 +25,96 @@ Submission prepared by Vijay Kalore for Serri hiring assignment (September 7, 20
 	docker-compose up --build
 	```
 
-App will be available at http://localhost:8000 and API at http://localhost:8000/api/videos
+App: http://localhost:8000 · OpenAPI docs: http://localhost:8000/docs
+
+### Build a Docker image locally
+
+```powershell
+# Build and tag with your Docker Hub username
+docker build -t vijaykalore/serri-backend:latest .
+
+# Optional: if Docker Hub CDN is temporarily unreachable on your network,
+# use an alternative mirror by overriding the base image ARG
+docker build --build-arg PYTHON_IMAGE=python:3.11-bookworm -t vijaykalore/serri-backend:latest .
+
+# Run the image (expects a Postgres URL; easiest via docker compose)
+docker run --rm -p 8000:8000 --env-file .env vijaykalore/serri-backend:latest
+
+# Push to Docker Hub after login
+docker login
+docker push vijaykalore/serri-backend:latest
+```
 
 ## Local (without Docker)
 
-```bash
+Two options:
+
+1) SQLite (easiest; Windows/Python 3.13 friendly)
+
+```powershell
+# 1) Create and activate a virtual environment
 python -m venv .venv
-. .venv/Scripts/activate
-pip install -r requirements.txt
-set DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/serri_videos
-alembic upgrade head
+. .\.venv\Scripts\Activate.ps1
+
+# 2) Install SQLite-friendly dependencies
+pip install -r requirements-sqlite.txt
+
+# 3) Use SQLite dev DB and disable the background poller while developing
+$env:DATABASE_URL = "sqlite+aiosqlite:///./dev.db"; $env:DISABLE_POLLER = "1"
+
+# 4) Provide YouTube API config via .env (recommended)
+#    Copy the example and edit keys/query inside the file
+copy .env.example .env
+
+# 5) Run the app
 uvicorn app.main:app --reload
+```
+
+Notes:
+- If you prefer to avoid editing a file, you can set env vars directly in your shell:
+	- `$env:YOUTUBE_API_KEYS = "KEY1,KEY2"`
+	- `$env:YOUTUBE_QUERY = "cricket"`
+- On Windows with Anaconda on PATH, prefer the helper script to force the project venv: `scripts\run_dev.ps1`.
+
+2) PostgreSQL (full features)
+
+```powershell
+python -m venv .venv
+. .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/serri_videos"
+python -m alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Tip: If you have Anaconda on PATH, uvicorn may spawn the reloader under Anaconda. Use the helper script to force the venv:
+
+```powershell
+scripts\run_dev.ps1
 ```
 
 ## Endpoints
 
-- GET /api/videos?page=1&per_page=20
-- GET /api/videos/search?q=tea how&page=1&per_page=20
+- GET /api/videos?page=1&per_page=20 — list stored videos (desc by published_at)
+- GET /api/videos/search?q=tea how&page=1&per_page=20 — search by title+description
+- POST /api/videos/_fetch_now — fetch latest from YouTube immediately
+- POST /api/videos/_seed — seed demo rows (SQLite dev only)
 
-Example curl:
+Optional filters and sorting:
+- `channel` — filter by channel title (contains, case-insensitive)
+- `sort` — `published_desc` (default) or `published_asc`
+
+Example:
 
 ```bash
-curl http://localhost:8000/api/videos?page=1&per_page=5
+curl "http://localhost:8000/api/videos?page=1&per_page=5"
 curl "http://localhost:8000/api/videos/search?q=cric mat&page=1&per_page=5"
+curl "http://localhost:8000/api/videos?channel=ESPN&sort=published_asc&page=1&per_page=6"
 ```
 
 ## Environment variables
 
-See .env.example
+See `.env.example`
 
 - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/serri_videos
 - YOUTUBE_API_KEYS=KEY1,KEY2
@@ -60,7 +127,7 @@ See .env.example
 
 ## Data model
 
-Table: videos
+Table: `videos`
 
 - id bigint PK
 - video_id text unique indexed
@@ -82,10 +149,10 @@ Indexes created by Alembic migration:
 
 ## Search strategy
 
-- Primary: PostgreSQL Full Text Search (to_tsvector/websearch_to_tsquery) + pg_trgm similarity for partials and reordered words.
-- Fallback (in tests/SQLite): ILIKE search over title/description.
+- PostgreSQL: Full Text Search (to_tsvector/websearch_to_tsquery) + pg_trgm similarity for partial/typo/reordered matches.
+- SQLite (local/tests): tokenized ILIKE filter plus fuzzy ranking in Python to handle reordered words and minor typos.
 
-Trade-offs: FTS is robust for linguistic tokenization and ranking; trigram boosts partial matches. It adds write-time/index costs and requires pg_trgm extension.
+Trade-offs: FTS is powerful and fast at scale; trigram helps partials. SQLite fallback is simpler and good for dev.
 
 ## Background fetcher
 
@@ -107,11 +174,21 @@ Trade-offs: FTS is robust for linguistic tokenization and ranking; trigram boost
 pytest -q
 ```
 
-Notes: tests default to SQLite and disable the poller; Postgres-only features are mocked/fallbacks.
+Notes: Tests default to SQLite and disable the poller. Set `DATABASE_URL` to Postgres to run against Postgres.
 
+## Dashboard
+
+- Available at the root path `/`.
+- Tailwind-based UI with a vibrant gradient background, search with keyboard shortcut (Ctrl/Cmd+K), pagination, “Fetch now,” and a “Seed demo” button for instant local data.
+
+
+## Submission
+
+Preferred stack: Python + FastAPI. Send the repo link to wasil@serri.club.
 ## Author
 
-- Vijay Kalore — Candidate, Backend Engineer
+- Name: Vijay kalore
+- Email: vijaykalore.ds@gmail.com
 - Company: Serri
 
-Delivery note: This submission was prepared by Vijay Kalore for Serri hiring assignment.
+Delivery note: This submission was prepared by Vijay kalore for the Serri hiring assignment.

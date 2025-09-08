@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Deque, Optional
 
 import httpx
@@ -59,12 +59,14 @@ class YouTubeClient:
         self.query = settings.youtube_query
         self.key_rotator = APIKeyRotator(settings.youtube_api_keys or [])
         self.client = httpx.AsyncClient(timeout=20)
-        self.last_polled_at: datetime = datetime.now(timezone.utc)
+        self.last_status_code = None
+        self.last_error = None
+    # Note: we don't store last_polled_at here; callers pass published_after or we use a safe recent default.
 
     async def close(self):
         await self.client.aclose()
 
-    async def search_latest(self, *, published_after: Optional[datetime] = None) -> list[dict[str, Any]]:
+    async def search_latest(self, *, published_after: Optional[datetime] = None, query: Optional[str] = None, include_published_after: bool = True) -> list[dict[str, Any]]:
         """Fetch latest videos since published_after using key rotation and backoff.
         Returns raw items list from YouTube API.
         """
@@ -75,12 +77,14 @@ class YouTubeClient:
             "part": "snippet",
             "type": "video",
             "order": "date",
-            "q": self.query,
+            "q": (query or self.query),
             "maxResults": 50,
         }
-        if published_after is None:
-            published_after = self.last_polled_at
-        params["publishedAfter"] = published_after.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        if include_published_after:
+            if published_after is None:
+                # Default to a small recent window to avoid 'cached old' or empty results on first call
+                published_after = datetime.now(timezone.utc) - timedelta(days=2)
+            params["publishedAfter"] = published_after.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
         backoff = 1.0
         for attempt in range(5):
@@ -92,7 +96,17 @@ class YouTubeClient:
             params["key"] = key
             try:
                 resp = await self.client.get(YOUTUBE_SEARCH_URL, params=params)
+                self.last_status_code = resp.status_code
+                self.last_error = None
                 if resp.status_code in (403, 429):
+                    # Capture error body if present
+                    try:
+                        err = resp.json().get("error", {})
+                        msg = err.get("message") or (err.get("errors", [{}])[0].get("reason"))
+                        if msg:
+                            self.last_error = str(msg)
+                    except Exception:
+                        pass
                     self.key_rotator.mark_exhausted()
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 30)
@@ -102,12 +116,24 @@ class YouTubeClient:
                 items = data.get("items", [])
                 return items
             except httpx.HTTPStatusError as e:
+                try:
+                    self.last_status_code = e.response.status_code
+                    # Try to extract structured YouTube error message
+                    try:
+                        err = e.response.json().get("error", {})
+                        msg = err.get("message") or (err.get("errors", [{}])[0].get("reason"))
+                        self.last_error = str(msg) if msg else f"HTTP {e.response.status_code}"
+                    except Exception:
+                        self.last_error = f"HTTP {e.response.status_code}"
+                except Exception:
+                    self.last_error = "HTTP error"
                 if 500 <= e.response.status_code < 600:
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, 30)
                     continue
                 raise
-            except httpx.RequestError:
+            except httpx.RequestError as e:
+                self.last_error = f"Request error: {type(e).__name__}"
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 30)
                 continue

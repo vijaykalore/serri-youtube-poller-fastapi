@@ -1,12 +1,11 @@
-import asyncio
-import os
-import json
-from httpx import AsyncClient
+from datetime import datetime, timezone, timedelta
+
 import pytest
+from httpx import AsyncClient
 
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/serri_videos")
-
-from app.main import app  # noqa: E402
+from app.main import app
+from app.db import get_session
+from app.crud import upsert_videos
 
 
 @pytest.mark.asyncio
@@ -17,14 +16,6 @@ async def test_list_videos_empty():
         data = r.json()
         assert data["page"] == 1
         assert data["items"] == []
-from datetime import datetime, timezone, timedelta
-
-import pytest
-from httpx import AsyncClient
-
-from app.main import app
-from app.db import get_session
-from app.crud import upsert_videos
 
 
 @pytest.mark.asyncio

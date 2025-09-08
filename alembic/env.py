@@ -24,9 +24,9 @@ def get_url() -> str:
     url = os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL is not set")
-    # Alembic runs with sync engine; translate asyncpg URL to psycopg2
+    # Alembic runs with sync engine; translate asyncpg URL to psycopg (psycopg v3)
     if "+asyncpg" in url:
-        url = url.replace("+asyncpg", "+psycopg2")
+        url = url.replace("+asyncpg", "+psycopg")
     return url
 
 

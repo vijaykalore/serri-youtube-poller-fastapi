@@ -1,7 +1,6 @@
-version: '3.9'
 services:
   db:
-    image: postgres:15
+    image: public.ecr.aws/docker/library/postgres:15
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -11,21 +10,36 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d serri_videos"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   app:
-    build: .
+    image: ${IMAGE_NAME:-vijukalore/serri-backend:latest}
+    build:
+      context: .
+      args:
+        BUILDER_IMAGE: ${BUILDER_IMAGE:-mcr.microsoft.com/devcontainers/python:3.11}
+        RUNTIME_IMAGE: ${RUNTIME_IMAGE:-python:3.11-slim}
     depends_on:
       db:
         condition: service_healthy
     env_file:
       - .env
+    environment:
+      PYTHONPATH: /app
+      BOOTSTRAP_DB: "1"
+      ALLOW_DEMO_SEED: "1"
     ports:
       - "8000:8000"
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host ${APP_HOST:-0.0.0.0} --port ${APP_PORT:-8000}"]
+    volumes:
+      - .:/app:ro
+    command: >
+      sh -c "python -c 'import asyncio; import app.models; from app.db import Base, create_all_for_testing; asyncio.run(create_all_for_testing(Base.metadata))' && \
+             uvicorn app.main:app --host ${APP_HOST:-0.0.0.0} --port ${APP_PORT:-8000}"
+    restart: unless-stopped
 
 volumes:
   pgdata:

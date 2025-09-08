@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from .config import get_settings
 from .crud import upsert_videos
 from .db import get_session
 from .youtube_client import YouTubeClient
+from sqlalchemy import select, func
+from .models import Video
 
 
 class BackgroundPoller:
@@ -35,7 +37,14 @@ class BackgroundPoller:
     async def _run(self):
         settings = get_settings()
         poll_interval = settings.poll_interval
-        last_after = datetime.now(timezone.utc)
+        # Initialize from DB max published_at to avoid missing recent items on first run
+        try:
+            async with get_session() as session:
+                res = await session.execute(select(func.max(Video.published_at)))
+                max_ts = res.scalar()
+        except Exception:
+            max_ts = None
+        last_after = max_ts or (datetime.now(timezone.utc) - timedelta(days=2))
         while self._running:
             try:
                 items = await self._client.search_latest(published_after=last_after)

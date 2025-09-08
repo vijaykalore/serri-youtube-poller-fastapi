@@ -1,0 +1,33 @@
+# Python / venv
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Test & tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# VCS
+.git/
+.gitignore
+.github/
+
+# Local databases
+*.db
+dev.db
+test.db
+
+# Node / misc
+node_modules/
+.DS_Store
+
+# Editor
+.vscode/
+*.code-workspace
+
+# Docker
+Dockerfile*
+.dockerignore

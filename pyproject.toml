@@ -1,0 +1,9 @@
+[tool.poetry]
+name = "backend"
+version = "0.1.0"
+description = "Backend project"
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.11"
+pytest = "^8.3.4"
