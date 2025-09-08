@@ -33,7 +33,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/serri-youtube-poller-fastapi
+          images: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/serri-youtube-poller-fastapi
+            ${{ secrets.DOCKERHUB_USERNAME }}/serri-backend
           tags: |
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/heads/') && github.ref_name == 'main' }}
             type=ref,event=tag

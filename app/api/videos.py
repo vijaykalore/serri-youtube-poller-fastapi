@@ -112,6 +112,9 @@ async def fetch_now(q: str | None = Query(None, description="Optional search que
     async with get_session() as session:
         res = await session.execute(select(func.max(Video.published_at)))
         max_ts = res.scalar()
+        # Normalize DB timestamp to timezone-aware UTC if it's naive
+        if isinstance(max_ts, datetime) and (max_ts.tzinfo is None or max_ts.tzinfo.utcoffset(max_ts) is None):
+            max_ts = max_ts.replace(tzinfo=timezone.utc)
 
     from ..youtube_client import YouTubeClient
     client = YouTubeClient()
@@ -128,6 +131,9 @@ async def fetch_now(q: str | None = Query(None, description="Optional search que
             ]
         else:
             base = max_ts or (now_utc - timedelta(days=7))
+            # Ensure base is timezone-aware UTC
+            if isinstance(base, datetime) and (base.tzinfo is None or base.tzinfo.utcoffset(base) is None):
+                base = base.replace(tzinfo=timezone.utc)
             # Clamp base to past and provide looser fallbacks
             if base > now_utc:
                 base = now_utc - timedelta(days=2)
