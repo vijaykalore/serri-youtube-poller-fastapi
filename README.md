@@ -137,7 +137,7 @@ Keep keys private. Don’t commit `.env` — only `.env.example` is in the repo.
 
 ---
 
-## How I solved the assignment (short write-up)
+## How I solved the assignment 
 
 1) Framework and shape
 	- FastAPI + async SQLAlchemy 2.x for clean async I/O.
