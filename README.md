@@ -1,194 +1,201 @@
-# Serri — YouTube Poller Backend
+# Serri — YouTube poller backend (FastAPI)
 
-Reviewer quick note: For fastest review, see SUBMISSION.md for a condensed run/validate guide. TL;DR — copy .env.example to .env, then `docker compose up -d --build`, open http://localhost:8000.
+I built a small service that keeps pulling the latest YouTube videos for a query (e.g. "cricket"), stores them, and lets you list and search them. It runs in Docker, has a background poller, a couple of APIs, and a simple dashboard.
 
-Author: Vijay kalore · Email: vijaykalore.ds2gmail.com · Role: Candidate — Backend Engineer · Company: Serri
+Reviewer note: if you just want to try it quickly, copy `.env.example` to `.env`, then run `docker compose up -d --build` and open http://localhost:8000. Full details below.
 
-A Dockerized FastAPI service that continuously polls the YouTube Data v3 Search API for the latest videos for a predefined query, stores them with indexes, and exposes:
-- A paginated list API sorted by published datetime (desc)
-- A search API on title + description with partial/reordered match support
-- An optional dashboard to browse/search videos
+Author: Vijay Kalore · Email: vijaykalore.ds@gmail.com · Date: September 8, 2025
 
-Submission date: September 8, 2025
+---
 
-## Quick start (Docker Compose)
+## How to run the server
 
-1. Copy env and edit variables:
-   
-	```bash
-	cp .env.example .env
-	```
-
-2. Start services:
-   
-	```bash
-	docker-compose up --build
-	```
-
-App: http://localhost:8000 · OpenAPI docs: http://localhost:8000/docs
-
-### Build a Docker image locally
+### Option A — Docker Compose (recommended)
+1) Create `.env` from the template and (optionally) add your YouTube API keys for live data.
 
 ```powershell
-# Build and tag with your Docker Hub username
-docker build -t vijaykalore/serri-backend:latest .
-
-# Optional: if Docker Hub CDN is temporarily unreachable on your network,
-# use an alternative mirror by overriding the base image ARG
-docker build --build-arg PYTHON_IMAGE=python:3.11-bookworm -t vijaykalore/serri-backend:latest .
-
-# Run the image (expects a Postgres URL; easiest via docker compose)
-docker run --rm -p 8000:8000 --env-file .env vijaykalore/serri-backend:latest
-
-# Push to Docker Hub after login
-docker login
-docker push vijaykalore/serri-backend:latest
+copy .env.example .env
+# Edit .env and set YOUTUBE_API_KEYS=KEY1,KEY2 (optional for live data)
 ```
 
-## Local (without Docker)
-
-Two options:
-
-1) SQLite (easiest; Windows/Python 3.13 friendly)
+2) Start the stack (Postgres + API/UI):
 
 ```powershell
-# 1) Create and activate a virtual environment
+docker compose up -d --build
+```
+
+Open:
+- UI: http://localhost:8000
+- API docs: http://localhost:8000/docs
+
+### Option B — Local, SQLite (no Docker)
+
+```powershell
 python -m venv .venv
 . .\.venv\Scripts\Activate.ps1
-
-# 2) Install SQLite-friendly dependencies
 pip install -r requirements-sqlite.txt
-
-# 3) Use SQLite dev DB and disable the background poller while developing
 $env:DATABASE_URL = "sqlite+aiosqlite:///./dev.db"; $env:DISABLE_POLLER = "1"
-
-# 4) Provide YouTube API config via .env (recommended)
-#    Copy the example and edit keys/query inside the file
-copy .env.example .env
-
-# 5) Run the app
+copy .env.example .env   # optional; edit keys/query later
 uvicorn app.main:app --reload
 ```
 
-Notes:
-- If you prefer to avoid editing a file, you can set env vars directly in your shell:
-	- `$env:YOUTUBE_API_KEYS = "KEY1,KEY2"`
-	- `$env:YOUTUBE_QUERY = "cricket"`
-- On Windows with Anaconda on PATH, prefer the helper script to force the project venv: `scripts\run_dev.ps1`.
-
-2) PostgreSQL (full features)
+### Option C — Local, PostgreSQL
 
 ```powershell
 python -m venv .venv
 . .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 $env:DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5432/serri_videos"
-python -m alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
-Tip: If you have Anaconda on PATH, uvicorn may spawn the reloader under Anaconda. Use the helper script to force the venv:
+If you have Anaconda on PATH and the reloader fights your venv, use `scripts\run_dev.ps1`.
 
+---
+
+## How to test the API (PowerShell examples)
+
+Seed demo rows (handy without keys):
 ```powershell
-scripts\run_dev.ps1
+Invoke-RestMethod http://localhost:8000/api/videos/_seed -Method POST | ConvertTo-Json -Depth 3
 ```
 
-## Endpoints
-
-- GET /api/videos?page=1&per_page=20 — list stored videos (desc by published_at)
-- GET /api/videos/search?q=tea how&page=1&per_page=20 — search by title+description
-- POST /api/videos/_fetch_now — fetch latest from YouTube immediately
-- POST /api/videos/_seed — seed demo rows (SQLite dev only)
-
-Optional filters and sorting:
-- `channel` — filter by channel title (contains, case-insensitive)
-- `sort` — `published_desc` (default) or `published_asc`
-
-Example:
-
-```bash
-curl "http://localhost:8000/api/videos?page=1&per_page=5"
-curl "http://localhost:8000/api/videos/search?q=cric mat&page=1&per_page=5"
-curl "http://localhost:8000/api/videos?channel=ESPN&sort=published_asc&page=1&per_page=6"
+List videos (paginated, newest first):
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/videos?page=1&per_page=5" -Method GET | ConvertTo-Json -Depth 4
 ```
 
-## Environment variables
-
-See `.env.example`
-
-- DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/serri_videos
-- YOUTUBE_API_KEYS=KEY1,KEY2
-- YOUTUBE_QUERY=cricket
-- POLL_INTERVAL=10
-- PAGE_SIZE_DEFAULT=20
-- APP_HOST=0.0.0.0
-- APP_PORT=8000
-- LOG_LEVEL=info
-
-## Data model
-
-Table: `videos`
-
-- id bigint PK
-- video_id text unique indexed
-- title text
-- description text
-- published_at timestamptz indexed (DESC)
-- thumbnails jsonb
-- channel_id text
-- channel_title text
-- raw_json jsonb
-- created_at timestamptz default now()
-- updated_at timestamptz default now()
-
-Indexes created by Alembic migration:
-
-- idx_videos_published_at_desc (btree on published_at)
-- GIN on to_tsvector('english', title || ' ' || description)
-- pg_trgm GIN on title, description
-
-## Search strategy
-
-- PostgreSQL: Full Text Search (to_tsvector/websearch_to_tsquery) + pg_trgm similarity for partial/typo/reordered matches.
-- SQLite (local/tests): tokenized ILIKE filter plus fuzzy ranking in Python to handle reordered words and minor typos.
-
-Trade-offs: FTS is powerful and fast at scale; trigram helps partials. SQLite fallback is simpler and good for dev.
-
-## Background fetcher
-
-- Polls YouTube Search API every POLL_INTERVAL seconds (default 10s).
-- Uses publishedAfter=last_seen to avoid cached results.
-- Stores unique videos by video_id (idempotent upsert) and captures thumbnails and raw snippet JSON.
-- API key rotation: supply multiple keys via YOUTUBE_API_KEYS. On 403/429, a key is marked exhausted for 10 minutes and the next available is tried with exponential backoff.
-
-## Scaling notes
-
-- Split poller into a separate worker Deployment or CronJob (K8s), or Celery beat with Redis.
-- Use a job queue (Redis/RabbitMQ) for resilient retries and backpressure.
-- Horizontal scale API behind a load balancer; DB connection pool tuning; add read replicas for heavy search.
-- Rotate and shard API keys; add observability (metrics/logs/traces) and circuit breakers.
-
-## Running tests
-
-```bash
-pytest -q
+Search by title/description:
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/videos/search?q=how%20play&page=1&per_page=5" -Method GET | ConvertTo-Json -Depth 4
 ```
 
-Notes: Tests default to SQLite and disable the poller. Set `DATABASE_URL` to Postgres to run against Postgres.
+Fetch now from YouTube (shows quota info if blocked):
+```powershell
+Invoke-RestMethod http://localhost:8000/api/videos/_fetch_now -Method POST | ConvertTo-Json -Depth 5
+```
 
-## Dashboard
+---
 
-- Available at the root path `/`.
-- Tailwind-based UI with a vibrant gradient background, search with keyboard shortcut (Ctrl/Cmd+K), pagination, “Fetch now,” and a “Seed demo” button for instant local data.
+## Expected output (shape and examples)
 
+- GET /api/videos returns:
 
-## Submission
+```json
+{
+  "total": 3,
+  "page": 1,
+  "per_page": 20,
+  "items": [
+	 {
+		"video_id": "demo-2",
+		"title": "How to play cricket",
+		"description": "Beginner tutorial",
+		"published_at": "2025-09-07T08:23:41.704467Z",
+		"thumbnails": { "default": { "url": "..." } },
+		"channel_id": "demo-ch",
+		"channel_title": "Demo Channel"
+	 }
+  ]
+}
+```
 
-Preferred stack: Python + FastAPI. Send the repo link to wasil@serri.club.
-## Author
+- GET /api/videos/search?q=how%20play returns relevant matches for reordered words (e.g., "How to play cricket").
 
-- Name: Vijay kalore
-- Email: vijaykalore.ds@gmail.com
-- Company: Serri
+- POST /api/videos/_fetch_now returns something like:
 
-Delivery note: This submission was prepared by Vijay kalore for the Serri hiring assignment.
+```json
+{
+  "status": "ok",
+  "fetched": 0,
+  "inserted": 0,
+  "query": "cricket",
+  "published_after": null,
+  "last_status": 403,
+  "last_error": "The request cannot be completed because you have exceeded your quota."
+}
+```
+
+If you add valid keys and quota is available, `fetched`/`inserted` will be > 0 and the new rows will appear in `/api/videos` immediately.
+
+---
+
+## Live data and private keys
+
+- Put your own keys in `.env` as:
+
+```
+YOUTUBE_API_KEYS=KEY1,KEY2,KEY3
+YOUTUBE_QUERY=cricket
+```
+
+- The background poller runs every `POLL_INTERVAL` seconds (default 10) and calls YouTube with `publishedAfter` anchored to the latest stored item. If a key hits quota (403/429), it is rotated out for a cooldown and the next key is tried.
+
+- The manual fetch endpoint (`/_fetch_now`) is for demonstrations; it tries a few safe time windows and, if empty, does one last request without `publishedAfter` to avoid showing “nothing”. The background poller always uses `publishedAfter` per the spec.
+
+Keep keys private. Don’t commit `.env` — only `.env.example` is in the repo.
+
+---
+
+## How I solved the assignment (short write-up)
+
+1) Framework and shape
+	- FastAPI + async SQLAlchemy 2.x for clean async I/O.
+	- Postgres in Docker Compose for full-text and trigram search; SQLite fallback for local/tests.
+
+2) Background poller
+	- A small async loop (10s interval) calling YouTube Search: `type=video&order=date&publishedAfter=<last_seen>`.
+	- Upserts by `video_id` (idempotent) and advances `last_seen` to the latest `published_at` we observed.
+
+3) Data model and indexes
+	- Table `videos(video_id, title, description, published_at, thumbnails, channel_id, channel_title, raw_json)` with indexes on `published_at` and unique `video_id`.
+	- On Postgres, enable pg_trgm (for similarity) and use FTS (to_tsvector/websearch_to_tsquery) in queries.
+
+4) Search
+	- Combine FTS + trigram similarity + ILIKE to handle partial matches and word reordering (e.g., "tea how" matches "How to make tea?").
+	- Sort primarily by relevance, secondarily by `published_at` (configurable asc/desc).
+
+5) API keys rotation
+	- Accept multiple keys via `YOUTUBE_API_KEYS`. On 403/429, mark a key exhausted for ~10 minutes, switch to the next, and use exponential backoff.
+
+6) Docker & DX
+	- Multi-stage Dockerfile; docker-compose with health-checked Postgres; schema bootstrap on startup; read-only source mount for quick iteration.
+	- A small Tailwind dashboard at `/` with search, pagination, and buttons for “Fetch now” and “Seed demo”.
+
+7) Tests & CI
+	- Tests run in SQLite mode by default; a GitHub Actions workflow installs deps and runs `pytest -q` on push/PR.
+
+---
+
+## Endpoints quick reference
+
+- GET `/api/videos?page=1&per_page=20&channel=&sort=published_desc`
+- GET `/api/videos/search?q=how%20play&page=1&per_page=20&sort=published_desc`
+- POST `/api/videos/_fetch_now`
+- POST `/api/videos/_seed` (enabled for local/dev)
+
+Environment variables (see `.env.example`):
+
+- `DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/serri_videos`
+- `YOUTUBE_API_KEYS=KEY1,KEY2`
+- `YOUTUBE_QUERY=cricket`
+- `POLL_INTERVAL=10`
+- `PAGE_SIZE_DEFAULT=20`
+- `APP_HOST=0.0.0.0`, `APP_PORT=8000`
+- `LOG_LEVEL=info`
+
+---
+
+## Troubleshooting
+
+- Quota errors: `/_fetch_now` will show `last_status=403` and a message. Add more keys or try later; the poller resumes automatically.
+- Postgres similarity() missing: make sure pg_trgm is enabled (this repo enables it on startup for Postgres).
+- Port already in use: change `APP_PORT` in `.env` or stop the conflicting process.
+
+---
+
+## License & author
+
+MIT License — see `LICENSE`.
+
+Author: Vijay Kalore (vijaykalore.ds@gmail.com)
