@@ -17,13 +17,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: local/serri-backend:test
+
+      - name: Login to Docker Hub (conditional)
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -34,14 +44,15 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/serri-youtube-poller-fastapi
-            ${{ secrets.DOCKERHUB_USERNAME }}/serri-backend
+            vijukalore/serri-youtube-poller-fastapi
+            vijukalore/serri-backend
           tags: |
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/heads/') && github.ref_name == 'main' }}
             type=ref,event=tag
             type=sha,format=short
 
-      - name: Build and push
+      - name: Build and push (conditional)
+        if: ${{ secrets.DOCKERHUB_USERNAME && secrets.DOCKERHUB_TOKEN }}
         uses: docker/build-push-action@v6
         with:
           context: .
