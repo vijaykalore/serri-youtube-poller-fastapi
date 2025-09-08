@@ -1,5 +1,5 @@
 # Serri — YouTube poller backend (FastAPI)
-
+See Execution_proof folder which contains the sanpshots of the project
 I built a small service that keeps pulling the latest YouTube videos for a query (e.g. "cricket"), stores them, and lets you list and search them. It runs in Docker, has a background poller, a couple of APIs, and a simple dashboard.
 
 Reviewer note: if you just want to try it quickly, copy `.env.example` to `.env`, then run `docker compose up -d --build` and open http://localhost:8000. Full details below.
@@ -194,20 +194,8 @@ Environment variables (see `.env.example`):
 
 ---
 
-## Docker Hub publishing (CI)
 
-A GitHub Actions workflow builds and pushes a Docker image on pushes to main and Git tags. To enable it:
 
-- In your GitHub repo Settings → Secrets and variables → Actions, add:
-	- `DOCKERHUB_USERNAME` = your Docker Hub username (e.g., `vijukalore`)
-	- `DOCKERHUB_TOKEN` = a Docker Hub access token with write permission
-
-The workflow publishes the image as `${DOCKERHUB_USERNAME}/serri-youtube-poller-fastapi` with tags:
-- `latest` on main
-- the Git tag (e.g., `v1.0.0`) on releases
-- the short commit SHA
-
-You can trigger it by pushing to main or creating a tag/release.
 
 
 ## Docker Hub Link: https://hub.docker.com/r/vijukalore/serri-backend
