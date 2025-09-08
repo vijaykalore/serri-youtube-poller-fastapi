@@ -194,6 +194,23 @@ Environment variables (see `.env.example`):
 
 ---
 
+## Docker Hub publishing (CI)
+
+A GitHub Actions workflow builds and pushes a Docker image on pushes to main and Git tags. To enable it:
+
+- In your GitHub repo Settings → Secrets and variables → Actions, add:
+	- `DOCKERHUB_USERNAME` = your Docker Hub username (e.g., `vijukalore`)
+	- `DOCKERHUB_TOKEN` = a Docker Hub access token with write permission
+
+The workflow publishes the image as `${DOCKERHUB_USERNAME}/serri-youtube-poller-fastapi` with tags:
+- `latest` on main
+- the Git tag (e.g., `v1.0.0`) on releases
+- the short commit SHA
+
+You can trigger it by pushing to main or creating a tag/release.
+
+---
+
 ## License & author
 
 MIT License — see `LICENSE`.
